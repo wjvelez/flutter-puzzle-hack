@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:cubef/cubef.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:game_board/game_board.dart';
@@ -8,9 +9,12 @@ class AppProvider extends ChangeNotifier {
   AppProvider() {
     initialize();
   }
+
+  final cubefKey = GlobalKey<CubefState>();
+
   var boardControllers = <CubeSide, BoardController<int>>{};
 
-  int boardSize = 4;
+  int boardSize = 3;
 
   int get numberOfTiles => boardSize * boardSize;
 
@@ -83,11 +87,12 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  BoardController<int> get currentBoardCtrl => boardControllers[cubeSide]!;
   List<BoardCell<int>> get currentPuzzle => boardControllers[cubeSide]!.board;
 
-  // BoardCell<int> get emptyTile => currentPuzzle.singleWhere(
-  //       (e) => e.data == null,
-  //     );
+  BoardCell<int> get emptyTile => currentPuzzle.singleWhere(
+        (e) => e.data == 0,
+      );
 
   bool isSolvable(List<BoardCell<int>> puzzle) {
     final _inversions = inversions(puzzle);
@@ -133,6 +138,141 @@ class AppProvider extends ChangeNotifier {
     }
     return false;
   }
+
+  bool isSolved(List<BoardCell<int>> puzzle) {
+    final _puzzleValues = puzzle.map((e) => e.data);
+    final _solvedPuzzle = List.generate(
+      numberOfTiles - 1,
+      (index) => index + 1,
+    );
+    final isSolved = _puzzleValues == _solvedPuzzle;
+    printLog('isSolved $isSolved');
+    return isSolved;
+  }
+
+  bool isTileMovable(BoardCell<int> boardCell) {
+    printLog('isTileMovable >> $boardCell');
+    printLog('isTileMovable >> $currentPuzzle');
+
+    if (boardCell.data == 0) return false;
+
+    if (boardCell.areNeighbors(emptyTile) || emptyTile.areNeighbors(boardCell)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  void moveTileOld(BoardCell<int> boardCell) {
+    printLog('moveTile cubeSide >> $cubeSide');
+    printLog('moveTile boardCell >> $boardCell');
+    printLog('moveTile emptyTile >> $emptyTile');
+
+    if (!isTileMovable(boardCell)) return;
+    final tempValue = boardCell.data;
+
+    final targetMove = calculateNewCubeSideOld(boardCell, emptyTile);
+
+    currentBoardCtrl.updateCell(
+      emptyTile.rowIndex,
+      emptyTile.columnIndex,
+      emptyTile.updateValue(tempValue),
+    );
+
+    currentBoardCtrl.updateCell(
+      boardCell.rowIndex,
+      boardCell.columnIndex,
+      boardCell.updateValue(0),
+    );
+    notifyListeners();
+
+    printLog('moved completed!');
+    printLog('moved $currentPuzzle');
+
+    if (targetMove != null) {
+      rotateCubeOld(targetMove);
+    }
+  }
+
+  MoveType? calculateNewCubeSideOld(
+    BoardCell<int> boardCell,
+    BoardCell<int> targetEmptyTile,
+  ) {
+    printLog('calculateNewCubeSide cubeSide >> $cubeSide');
+    printLog('calculateNewCubeSide boardCell >> $boardCell');
+    printLog('calculateNewCubeSide emptyTile >> $targetEmptyTile');
+    MoveType? targetMove;
+    if (targetEmptyTile.isTopNeighbor(boardCell) || boardCell.isBottomNeighbor(targetEmptyTile)) {
+      targetMove = MoveType.top;
+    } else if (targetEmptyTile.isLeftNeighbor(boardCell) || boardCell.isRightNeighbor(targetEmptyTile)) {
+      targetMove = MoveType.left;
+    } else if (targetEmptyTile.isRightNeighbor(boardCell) || boardCell.isLeftNeighbor(targetEmptyTile)) {
+      targetMove = MoveType.right;
+    } else if (targetEmptyTile.isBottomNeighbor(boardCell) || boardCell.isTopNeighbor(targetEmptyTile)) {
+      targetMove = MoveType.down;
+    } else {
+      printLog('invalid move!');
+    }
+    // printLog('calculateNewCubeSide newSide >> $newSide');
+    printLog('calculateNewCubeSide targetMove >> $targetMove');
+    return targetMove;
+  }
+
+  void rotateCubeOld(MoveType targetMove) {
+    switch (targetMove) {
+      case MoveType.top:
+        cubeSide = cubeSide.moveSide(MoveType.top);
+        cubefKey.currentState!.rollDown();
+        // cubefKey.currentState!.rollUp();
+        break;
+      case MoveType.down:
+        cubeSide = cubeSide.moveSide(MoveType.down);
+        cubefKey.currentState!.rollUp();
+        // cubefKey.currentState!.rollDown();
+        break;
+      case MoveType.left:
+        cubeSide = cubeSide.moveSide(MoveType.left);
+        cubefKey.currentState!.rollLeft();
+        break;
+      case MoveType.right:
+        cubeSide = cubeSide.moveSide(MoveType.right);
+        cubefKey.currentState!.rollRight();
+        break;
+    }
+    printLog('newCubeSide >> $cubeSide');
+    notifyListeners();
+  }
+
+  void moveTile(BoardCell<int> boardCell) {
+    printLog('moveTile cubeSide >> $cubeSide');
+    printLog('moveTile boardCell >> $boardCell');
+    printLog('moveTile emptyTile >> $emptyTile');
+
+    if (!isTileMovable(boardCell)) return;
+    final tempValue = boardCell.data;
+
+    final targetMove = calculateNewCubeSideOld(boardCell, emptyTile);
+
+    currentBoardCtrl.updateCell(
+      emptyTile.rowIndex,
+      emptyTile.columnIndex,
+      emptyTile.updateValue(tempValue),
+    );
+
+    currentBoardCtrl.updateCell(
+      boardCell.rowIndex,
+      boardCell.columnIndex,
+      boardCell.updateValue(0),
+    );
+    notifyListeners();
+
+    printLog('moved completed!');
+    printLog('moved $currentPuzzle');
+
+    // if (targetMove != null) {
+    //   rotateCubeOld(targetMove);
+    // }
+  }
 }
 
 // * Vertical:     1 - 2 - 3 - 4,
@@ -140,12 +280,12 @@ class AppProvider extends ChangeNotifier {
 
 /*
 * Moves:
-* L: to Left { B } | to right { F } | to Up { T } | to Down { D }
-* F: to Left { L } | to right { R } | to Up { T } | to Down { D }
-* R: to Left { F } | to right { B } | to Up { T } | to Down { D }
-* B: to Left { R } | to right { L } | to Up { T } | to Down { D }
-* T: to Left { L } | to right { R } | to Up { B } | to Down { F }
-* D: to Left { L } | to right { R } | to Up { T } | to Down { B }
+* L: to Left { F } | to right { B } | to Up { D } | to Down { T }
+* F: to Left { R } | to right { L } | to Up { D } | to Down { T }
+* R: to Left { B } | to right { F } | to Up { D } | to Down { T }
+* B: to Left { L } | to right { R } | to Up { D } | to Down { T }
+* T: to Left { R } | to right { L } | to Up { F } | to Down { B }
+* D: to Left { R } | to right { L } | to Up { B } | to Down { F }
 */
 
 enum CubeSide {
@@ -185,78 +325,78 @@ extension CubeSideExtension on CubeSide {
   CubeSide leftSideMove(MoveType move) {
     switch (move) {
       case MoveType.left:
-        return CubeSide.back;
-      case MoveType.right:
         return CubeSide.front;
+      case MoveType.right:
+        return CubeSide.back;
       case MoveType.top:
-        return CubeSide.top;
-      case MoveType.down:
         return CubeSide.down;
+      case MoveType.down:
+        return CubeSide.top;
     }
   }
 
   CubeSide frontSideMove(MoveType move) {
     switch (move) {
       case MoveType.left:
-        return CubeSide.left;
-      case MoveType.right:
         return CubeSide.right;
+      case MoveType.right:
+        return CubeSide.left;
       case MoveType.top:
-        return CubeSide.top;
-      case MoveType.down:
         return CubeSide.down;
+      case MoveType.down:
+        return CubeSide.top;
     }
   }
 
   CubeSide rightSideMove(MoveType move) {
     switch (move) {
       case MoveType.left:
-        return CubeSide.front;
-      case MoveType.right:
         return CubeSide.back;
+      case MoveType.right:
+        return CubeSide.front;
       case MoveType.top:
-        return CubeSide.top;
-      case MoveType.down:
         return CubeSide.down;
+      case MoveType.down:
+        return CubeSide.top;
     }
   }
 
   CubeSide backSideMove(MoveType move) {
     switch (move) {
       case MoveType.left:
-        return CubeSide.right;
-      case MoveType.right:
         return CubeSide.left;
+      case MoveType.right:
+        return CubeSide.right;
       case MoveType.top:
-        return CubeSide.top;
-      case MoveType.down:
         return CubeSide.down;
+      case MoveType.down:
+        return CubeSide.top;
     }
   }
 
   CubeSide topSideMove(MoveType move) {
     switch (move) {
       case MoveType.left:
-        return CubeSide.left;
-      case MoveType.right:
         return CubeSide.right;
+      case MoveType.right:
+        return CubeSide.left;
       case MoveType.top:
-        return CubeSide.back;
-      case MoveType.down:
         return CubeSide.front;
+      case MoveType.down:
+        return CubeSide.back;
     }
   }
 
   CubeSide downSideMove(MoveType move) {
     switch (move) {
       case MoveType.left:
-        return CubeSide.left;
-      case MoveType.right:
         return CubeSide.right;
+      case MoveType.right:
+        return CubeSide.left;
       case MoveType.top:
-        return CubeSide.top;
-      case MoveType.down:
         return CubeSide.back;
+      case MoveType.down:
+        return CubeSide.front;
     }
   }
 
@@ -269,7 +409,7 @@ extension CubeSideExtension on CubeSide {
       case CubeSide.right:
         return Colors.greenAccent;
       case CubeSide.back:
-        return Colors.pinkAccent;
+        return Colors.black;
       case CubeSide.top:
         return Colors.purpleAccent;
       case CubeSide.down:
@@ -287,7 +427,6 @@ extension CubeSideExtension on CubeSide {
 *       2
 *  5 == 1 == 6 == 3
 *       4
-*     
 * 
 *             |============|
 *             |=T1==T2==T3=|
@@ -310,10 +449,10 @@ extension CubeSideExtension on CubeSide {
 *             |============|
 
 * Moves:
-* L: to Left { B } | to right { F } | to Up { T } | to Down { D }
-* F: to Left { L } | to right { R } | to Up { T } | to Down { D }
-* R: to Left { F } | to right { B } | to Up { T } | to Down { D }
-* B: to Left { R } | to right { L } | to Up { T } | to Down { D }
-* T: to Left { L } | to right { R } | to Up { B } | to Down { F }
-* D: to Left { L } | to right { R } | to Up { T } | to Down { B }
+* L: to Left { F } | to right { B } | to Up { D } | to Down { T }
+* F: to Left { R } | to right { L } | to Up { D } | to Down { T }
+* R: to Left { B } | to right { F } | to Up { D } | to Down { T }
+* B: to Left { L } | to right { R } | to Up { D } | to Down { T }
+* T: to Left { R } | to right { L } | to Up { F } | to Down { B }
+* D: to Left { R } | to right { L } | to Up { B } | to Down { F }
 */
